@@ -27,6 +27,22 @@ spec:
       serviceAccountName: {{ include "helm.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: openid-storage
+          emptyDir:
+      initContainers:
+        - name: get-openind-configuration
+          image: curlimages/curl
+          command:
+          - sh
+          - -c
+          - |
+            mkdir -p /data/.well-known /data/openid/v1
+            curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)"  "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration" > /data/.well-known/openid-configuration
+            curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)"  "https://kubernetes.default.svc.cluster.local/openid/v1/jwks" > /data/openid/v1/jwks
+          volumeMounts:
+          - name: openid-storage
+            mountPath: /data
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -37,14 +53,17 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
+#          livenessProbe:
+#            httpGet:
+#              path: /
+#              port: http
+#          readinessProbe:
+#            httpGet:
+#              path: /
+#              port: http
+          volumeMounts:
+            - name: openid-storage
+              mountPath: "/usr/share/nginx/html"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
